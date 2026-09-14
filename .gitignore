@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+/.pnpm
+/pnpm-lockfile
+/yarn.lock
+/package-lock-lock
+
+# Production
+/build/
+/dist/
+
+# Environment variables
+.env*
+.local*
+
+# TanStack Start
+.tanstack
+
+# Output
+.output/
+
+# ML model weights
+*.pth
+*.pt
+.ckpt
+
+# Conda / Miniconda
+conda-meta/
+
+# IDE
+.vscode/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TruthLens specific
+tmp/
+output/
