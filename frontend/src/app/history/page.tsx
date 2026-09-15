@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Shield, Clock, AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
+import { Shield, Trash2 } from "lucide-react";
 
 // Mock history data — will connect to Supabase later
 const MOCK_HISTORY = [

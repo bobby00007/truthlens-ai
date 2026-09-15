@@ -1,5 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
+import Link from "next/link";
+import Image from "next/image";
 import { Upload, FileImage, Video, FileAudio, Globe, MessageSquare, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 const MEDIA_TYPES = [
@@ -10,13 +12,28 @@ const MEDIA_TYPES = [
   { value: "screenshot", icon: MessageSquare, label: "Screenshot / Message", accept: "image/*" },
 ];
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+type Risk = "LOW" | "MEDIUM" | "HIGH";
+
+type AnalysisResult = {
+  prediction: string;
+  confidence: number;
+  risk: Risk;
+  explanation: string;
+  artifacts: string[];
+  recommendation: string;
+  modelVersion: string;
+};
+
 export default function UploadPage() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (f: File | null) => {
@@ -26,27 +43,40 @@ export default function UploadPage() {
       setPreview(URL.createObjectURL(f));
     }
     setResult(null);
+    setError(null);
   };
 
   const handleAnalyze = async () => {
+    if (!selectedType || (selectedType === "url" ? !url.trim() : !file)) return;
+
     setAnalyzing(true);
     setResult(null);
-    // Simulated analysis — replace with real API call later
-    await new Promise((r) => setTimeout(r, 2500));
-    const isAI = Math.random() > 0.3;
-    const confidence = Math.round(70 + Math.random() * 28);
-    setResult({
-      prediction: isAI ? "potentially_ai_generated" : "likely_authentic",
-      confidence,
-      risk: confidence >= 85 ? "HIGH" : confidence >= 65 ? "MEDIUM" : "LOW",
-      explanation: isAI
-        ? "Facial texture anomaly detected around the eyes and cheeks, typical of diffusion-model generation. No EXIF metadata suggests AI origin."
-        : "No significant artifacts detected. Minor noise pattern consistent with original capture.",
-      artifacts: isAI ? ["facial_texture_anomaly", "over_smooth_skin", "no_metadata"] : ["natural_noise_pattern", "consistent_lighting"],
-      recommendation: isAI ? "Do not forward until independently verified." : "Low risk — standard caution advised.",
-      modelVersion: "EfficientNet-B3 v1.2",
-    });
-    setAnalyzing(false);
+    setError(null);
+
+    try {
+      const response = selectedType === "url"
+        ? await fetch(`${API_URL}/api/analyze/url?url=${encodeURIComponent(url.trim())}`, { method: "POST" })
+        : await fetch(`${API_URL}/api/analyze/${selectedType}`, {
+            method: "POST",
+            body: (() => {
+              const body = new FormData();
+              body.append("file", file as File);
+              return body;
+            })(),
+          });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.detail || "The analysis request failed.");
+      }
+
+      const data = await response.json() as Omit<AnalysisResult, "modelVersion"> & { model_version: string };
+      setResult({ ...data, modelVersion: data.model_version });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "The analysis request failed.");
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const selectedMeta = MEDIA_TYPES.find((t) => t.value === selectedType);
@@ -71,7 +101,7 @@ export default function UploadPage() {
           {MEDIA_TYPES.map((t) => (
             <button
               key={t.value}
-              onClick={() => { setSelectedType(t.value); setFile(null); setPreview(null); setResult(null); }}
+              onClick={() => { setSelectedType(t.value); setFile(null); setPreview(null); setResult(null); setError(null); }}
               className={`flex flex-col items-center gap-2 p-4 rounded-2xl border text-center transition ${
                 selectedType === t.value
                   ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950"
@@ -112,7 +142,7 @@ export default function UploadPage() {
             {file?.type.startsWith("video") ? (
               <video src={preview} controls className="w-full max-h-64" />
             ) : (
-              <img src={preview} alt="preview" className="w-full max-h-64 object-contain" />
+              <Image src={preview} alt="preview" width={640} height={360} unoptimized className="w-full max-h-64 object-contain" />
             )}
           </div>
         )}
@@ -133,7 +163,11 @@ export default function UploadPage() {
         )}
 
         {/* Result */}
-        {result && (
+        {error ? (
+          <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+            {error}
+          </div>
+        ) : result && (
           <div className="mt-8 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 bg-zinc-50 dark:bg-zinc-950">
             <div className="flex items-center gap-3 mb-4">
               {result.risk === "HIGH" ? <AlertTriangle className="h-6 w-6 text-red-500" /> : <CheckCircle2 className="h-6 w-6 text-emerald-500" />}
@@ -170,7 +204,7 @@ export default function UploadPage() {
   );
 }
 
-function ShieldIcon(props: any) {
+function ShieldIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
